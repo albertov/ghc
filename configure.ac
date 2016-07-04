@@ -451,6 +451,15 @@ AC_SUBST(CrossCompiling)
 AC_SUBST(CrossCompilePrefix)
 AC_SUBST(TargetPlatformFull)
 
+dnl ** Shall we use an emulator when cross-compiling?
+dnl --------------------------------------------------------------
+AC_ARG_WITH([emulator],
+[AC_HELP_STRING([--with-emulator=ARG],
+  [Use ARG as the path to an emulator for hsc2cs to run tests with when cross-compiling  [default=""]])],
+  [CrossCompileEmulator="$withval"])
+AC_SUBST(CrossCompileEmulator)
+
+
 dnl ** Which gcc to use?
 dnl --------------------------------------------------------------
 FIND_GCC([WhatGccIsCalled], [gcc], [gcc])
@@ -1170,10 +1179,21 @@ else
     CompilerName="gcc          "
 fi
 
+
 echo ["\
    Using $CompilerName       : $WhatGccIsCalled
       which is version       : $GccVersion
-   Building a cross compiler : $CrossCompiling
+   Building a cross compiler : $CrossCompiling"]
+
+if test "$CrossCompileEmulator" != ""; then
+  echo ["\
+      using emulator         : $CrossCompileEmulator"]
+else
+  echo ["\
+      without emulator"]
+fi
+
+echo ["\
    hs-cpp       : $HaskellCPPCmd
    hs-cpp-flags : $HaskellCPPArgs
    ld           : $LdCmd
