@@ -437,6 +437,14 @@ PACKAGES_STAGE0 += terminfo
 endif
 endif
 
+# Enable TH on cross-compilers.
+# NOTE: For this to work base must be available but I (albertov)
+# can't manage to build it on stage1 so GHC stage0 must be the
+# same version as the one we're building now
+ifeq "$(GhcWithInterpreter) $(Stage1TH)" "YES YES"
+PACKAGES_STAGE0 += ghci
+endif
+
 PACKAGES_STAGE1 += ghc-prim
 PACKAGES_STAGE1 += $(INTEGER_LIBRARY)
 PACKAGES_STAGE1 += base

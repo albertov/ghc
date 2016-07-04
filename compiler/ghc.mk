@@ -335,6 +335,9 @@ compiler_stage2_CONFIGURE_OPTS += --flags=ncg
 endif
 
 ifeq "$(GhcWithInterpreter)" "YES"
+ifeq "$(Stage1TH)" "YES"
+compiler_stage1_CONFIGURE_OPTS += --flags=ghci
+endif
 compiler_stage2_CONFIGURE_OPTS += --flags=ghci
 
 ifeq "$(GhcEnableTablesNextToCode) $(GhcUnregisterised)" "YES NO"
