@@ -14,7 +14,7 @@ AC_DEFUN([GHC_SELECT_FILE_EXTENSIONS],
         AC_MSG_WARN([I'm assuming you wanted to build for i386-unknown-mingw32])
         exit 1
         ;;
-    *-unknown-mingw32)
+    *-mingw32)
         windows=YES
         $2='.exe'
         $3='.dll'
@@ -480,8 +480,14 @@ AC_DEFUN([FP_SETTINGS],
         SettingsLdCommand="$LdCmd"
         SettingsArCommand="$ArCmd"
         SettingsPerlCommand="$PerlCmd"
-        SettingsDllWrapCommand="/bin/false"
-        SettingsWindresCommand="/bin/false"
+	if test "$CrossCompiling" = YES && test "$TargetOS" = mingw32
+        then
+          SettingsDllWrapCommand="${CrossCompilePrefix}dllwrap"
+          SettingsWindresCommand="${CrossCompilePrefix}windres"
+        else
+          SettingsDllWrapCommand="/bin/false"
+          SettingsWindresCommand="/bin/false"
+        fi
         SettingsLibtoolCommand="libtool"
         SettingsTouchCommand='touch'
     fi
@@ -808,7 +814,7 @@ AC_DEFUN([FP_LEADING_UNDERSCORE],
 AC_CACHE_CHECK([leading underscore in symbol names], [fptools_cv_leading_underscore], [
 # Hack!: nlist() under Digital UNIX insist on there being an _,
 # but symbol table listings shows none. What is going on here?!?
-case $HostPlatform in
+case $TargetPlatform in
 *openbsd*) # x86 openbsd is ELF from 3.4 >, meaning no leading uscore
   case $build in
     i386-*2\.@<:@0-9@:>@ | i386-*3\.@<:@0-3@:>@ ) fptools_cv_leading_underscore=yes ;;
