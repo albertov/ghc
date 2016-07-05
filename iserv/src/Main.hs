@@ -1,11 +1,10 @@
-{-# LANGUAGE RecordWildCards, GADTs, ScopedTypeVariables, RankNTypes #-}
+{-# LANGUAGE RecordWildCards, GADTs, ScopedTypeVariables, RankNTypes, CPP #-}
 module Main (main) where
 
 import GHCi.Run
 import GHCi.TH
 import GHCi.Message
 import GHCi.Signals
-import GHCi.Utils
 
 import Control.DeepSeq
 import Control.Exception
@@ -14,24 +13,35 @@ import Data.Binary
 import Data.IORef
 import System.Environment
 import System.Exit
-import Text.Printf
+import System.IO
 
 main :: IO ()
 main = do
-  (arg0:arg1:rest) <- getArgs
-  let wfd1 = read arg0; rfd2 = read arg1
-  verbose <- case rest of
+  args <- getArgs
+  verbose <- case args of
     ["-v"] -> return True
     []     -> return False
-    _      -> die "iserv: syntax: iserv <write-fd> <read-fd> [-v]"
-  when verbose $ do
-    printf "GHC iserv starting (in: %d; out: %d)\n"
-      (fromIntegral rfd2 :: Int) (fromIntegral wfd1 :: Int)
-  inh  <- getGhcHandle rfd2
-  outh <- getGhcHandle wfd1
+    _      -> die "iserv: syntax: iserv [-v]"
+  when verbose $ hPutStrLn stderr "GHC iserv starting"
   installSignalHandlers
+#if defined(mingw32_HOST_OS)
+  -- When cross-compiling (at least) we need to preload these DLLs since
+  -- base depends on symbols
+  -- defined in them, namely _CommandLineToArgvW
+  -- Interestingly, running ghc-iserv.exe with "+RTS -Dl" shows that ghc
+  -- sends FindSystemLibrary requests looking for them but for some reason
+  -- never sends LoadDLL requests for them.
+  mapM_ (run . LoadDLL)
+    [ "shell32"   -- for _CommandLineToArgvW
+    , "wsock32"   -- for _recv
+    ]
+#endif
   lo_ref <- newIORef Nothing
-  let pipe = Pipe{pipeRead = inh, pipeWrite = outh, pipeLeftovers = lo_ref}
+  hSetBuffering stdin NoBuffering
+  hSetBinaryMode stdin True
+  hSetBuffering stdout NoBuffering
+  hSetBinaryMode stdout True
+  let pipe = Pipe{pipeRead = stdin, pipeWrite = stdout, pipeLeftovers = lo_ref}
   uninterruptibleMask $ serv verbose pipe
     -- we cannot allow any async exceptions while communicating, because
     -- we will lose sync in the protocol, hence uninterruptibleMask.
@@ -40,9 +50,10 @@ serv :: Bool -> Pipe -> (forall a .IO a -> IO a) -> IO ()
 serv verbose pipe@Pipe{..} restore = loop
  where
   loop = do
+    when verbose $ hPutStrLn stderr ("iserv: waiting for Message")
     Msg msg <- readPipe pipe getMessage
     discardCtrlC
-    when verbose $ putStrLn ("iserv: " ++ show msg)
+    when verbose $ hPutStrLn stderr ("iserv: " ++ show msg)
     case msg of
       Shutdown -> return ()
       RunTH st q ty loc -> wrapRunTH $ runTH pipe st q ty loc
@@ -51,7 +62,7 @@ serv verbose pipe@Pipe{..} restore = loop
 
   reply :: forall a. (Binary a, Show a) => a -> IO ()
   reply r = do
-    when verbose $ putStrLn ("iserv: return: " ++ show r)
+    when verbose $ hPutStrLn stderr ("iserv: return: " ++ show r)
     writePipe pipe (put r)
     loop
 
@@ -61,16 +72,16 @@ serv verbose pipe@Pipe{..} restore = loop
     case r of
       Left e
         | Just (GHCiQException _ err) <- fromException e  -> do
-           when verbose $ putStrLn "iserv: QFail"
+           when verbose $ hPutStrLn stderr "iserv: QFail"
            writePipe pipe (putMessage (QFail err))
            loop
         | otherwise -> do
-           when verbose $ putStrLn "iserv: QException"
+           when verbose $ hPutStrLn stderr "iserv: QException"
            str <- showException e
            writePipe pipe (putMessage (QException str))
            loop
       Right a -> do
-        when verbose $ putStrLn "iserv: QDone"
+        when verbose $ hPutStrLn stderr "iserv: QDone"
         writePipe pipe (putMessage QDone)
         reply a
 

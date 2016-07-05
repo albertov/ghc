@@ -33,6 +33,7 @@ import GHC.Word
 
 import GHC.Exts
 import GHC.IO ( IO(..) )
+import System.IO (stderr, hPutStr)
 import System.IO.Unsafe ( unsafeDupablePerformIO )
 
 data BreakArray = BA (MutableByteArray# RealWorld)
@@ -45,8 +46,8 @@ showBreakArray :: BreakArray -> IO ()
 showBreakArray array = do
     forM_ [0 .. (size array - 1)] $ \i -> do
         val <- readBreakArray array i
-        putStr $ ' ' : show val
-    putStr "\n"
+        hPutStr stderr $ ' ' : show val
+    hPutStr stderr "\n"
 
 setBreakOn :: BreakArray -> Int -> IO Bool
 setBreakOn array index

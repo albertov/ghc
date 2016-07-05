@@ -74,12 +74,7 @@ import GHC.Stack.CCS (CostCentre,CostCentreStack)
 import System.Exit
 import Data.Maybe
 import GHC.IO.Handle.Types (Handle)
-#ifdef mingw32_HOST_OS
-import Foreign.C
-import GHC.IO.Handle.FD (fdToHandle)
-#else
-import System.Posix as Posix
-#endif
+import System.IO (BufferMode(NoBuffering), hSetBuffering, hSetBinaryMode)
 import System.Process
 import GHC.Conc (getNumProcessors, pseq, par)
 
@@ -468,39 +463,16 @@ stopIServ HscEnv{..} =
        else iservCall iserv Shutdown
 
 runWithPipes :: FilePath -> [String] -> IO (ProcessHandle, Handle, Handle)
-#ifdef mingw32_HOST_OS
-foreign import ccall "io.h _close"
-   c__close :: CInt -> IO CInt
-
-foreign import ccall unsafe "io.h _get_osfhandle"
-   _get_osfhandle :: CInt -> IO CInt
-
 runWithPipes prog opts = do
-    (rfd1, wfd1) <- createPipeFd -- we read on rfd1
-    (rfd2, wfd2) <- createPipeFd -- we write on wfd2
-    wh_client    <- _get_osfhandle wfd1
-    rh_client    <- _get_osfhandle rfd2
-    let args = show wh_client : show rh_client : opts
-    (_, _, _, ph) <- createProcess (proc prog args)
-    rh <- mkHandle rfd1
-    wh <- mkHandle wfd2
+    (Just wh, Just rh, _, ph) <- createProcess (proc prog [])
+      { std_in = CreatePipe
+      , std_out = CreatePipe
+      }
+    hSetBuffering wh NoBuffering
+    hSetBinaryMode wh True
+    hSetBuffering rh NoBuffering
+    hSetBinaryMode rh True
     return (ph, rh, wh)
-      where mkHandle :: CInt -> IO Handle
-            mkHandle fd = (fdToHandle fd) `onException` (c__close fd)
-#else
-runWithPipes prog opts = do
-    (rfd1, wfd1) <- Posix.createPipe -- we read on rfd1
-    (rfd2, wfd2) <- Posix.createPipe -- we write on wfd2
-    setFdOption rfd1 CloseOnExec True
-    setFdOption wfd2 CloseOnExec True
-    let args = show wfd1 : show rfd2 : opts
-    (_, _, _, ph) <- createProcess (proc prog args)
-    closeFd wfd1
-    closeFd rfd2
-    rh <- fdToHandle rfd1
-    wh <- fdToHandle wfd2
-    return (ph, rh, wh)
-#endif
 
 -- -----------------------------------------------------------------------------
 {- Note [External GHCi pointers]

@@ -33,6 +33,7 @@ import Foreign
 import Foreign.C
 import GHC.Conc.Sync
 import GHC.IO hiding ( bracket )
+import System.IO (stderr, hPutStrLn)
 import System.Exit
 import System.Mem.Weak  ( deRefWeak )
 import Unsafe.Coerce
@@ -315,7 +316,7 @@ noBreakStablePtr :: StablePtr BreakpointCallback
 noBreakStablePtr = unsafePerformIO $ newStablePtr noBreakAction
 
 noBreakAction :: BreakpointCallback
-noBreakAction _ _ False _ = putStrLn "*** Ignoring breakpoint"
+noBreakAction _ _ False _ = hPutStrLn stderr  "*** Ignoring breakpoint"
 noBreakAction _ _ True  _ = return () -- exception: just continue
 
 -- Malloc and copy the bytes.  We don't have any way to monitor the
