@@ -459,7 +459,6 @@ AC_ARG_WITH([emulator],
   [CrossCompileEmulator="$withval"])
 AC_SUBST(CrossCompileEmulator)
 
-
 dnl ** Which gcc to use?
 dnl --------------------------------------------------------------
 FIND_GCC([WhatGccIsCalled], [gcc], [gcc])

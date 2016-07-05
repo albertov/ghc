@@ -53,6 +53,7 @@ import GHCi.BreakArray (BreakArray)
 import HscTypes
 import UniqFM
 import Panic
+import Platform
 import DynFlags
 import ErrUtils
 import Outputable
@@ -439,9 +440,17 @@ startIServ dflags = do
         | WayProf `elem` ways dflags = "-prof"
         | WayDyn `elem` ways dflags = "-dyn"
         | otherwise = ""
-      prog = pgm_i dflags ++ flavour
-      opts = getOpts dflags opt_i
-  debugTraceMsg dflags 3 $ text "Starting " <> text prog
+      iserv = pgm_i dflags ++ flavour ++ iservExtension
+      iserv_opts = getOpts dflags opt_i
+      emulated = platformIsCrossCompiling . sTargetPlatform . settings $ dflags
+      (prog, opts, msg)
+        | emulated = ( pgm_e dflags
+                     , iserv : iserv_opts
+                     , text "Starting " <> text iserv <>
+                       text " via " <> text (pgm_e dflags)
+                     )
+        | otherwise = (iserv, iserv_opts, text "Starting " <> text iserv)
+  debugTraceMsg dflags 3 msg
   (ph, rh, wh) <- runWithPipes prog opts
   lo_ref <- newIORef Nothing
   cache_ref <- newIORef emptyUFM
@@ -453,6 +462,15 @@ startIServ dflags = do
     , iservLookupSymbolCache = cache_ref
     , iservPendingFrees = []
     }
+
+-- We cannot rely on System.Directory.exeExtension because it is configured for
+-- the host system
+iservExtension :: String
+#if defined(mingw32_TARGET_OS)
+iservExtension = ".exe"
+#else
+iservExtension = ""
+#endif
 
 stopIServ :: HscEnv -> IO ()
 stopIServ HscEnv{..} =
