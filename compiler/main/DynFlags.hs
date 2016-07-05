@@ -73,7 +73,7 @@ module DynFlags (
         versionedAppDir,
         extraGccViaCFlags, systemPackageConfig,
         pgm_L, pgm_P, pgm_F, pgm_c, pgm_s, pgm_a, pgm_l, pgm_dll, pgm_T,
-        pgm_windres, pgm_libtool, pgm_lo, pgm_lc, pgm_i,
+        pgm_windres, pgm_libtool, pgm_lo, pgm_lc, pgm_i, pgm_e,
         opt_L, opt_P, opt_F, opt_c, opt_a, opt_l, opt_i,
         opt_windres, opt_lo, opt_lc,
 
@@ -958,6 +958,7 @@ data Settings = Settings {
   sPgm_lo                :: (String,[Option]), -- LLVM: opt llvm optimiser
   sPgm_lc                :: (String,[Option]), -- LLVM: llc static compiler
   sPgm_i                 :: String,
+  sPgm_e                 :: String,
   -- options for particular phases
   sOpt_L                 :: [String],
   sOpt_P                 :: [String],
@@ -1021,6 +1022,8 @@ pgm_lc                :: DynFlags -> (String,[Option])
 pgm_lc dflags = sPgm_lc (settings dflags)
 pgm_i                 :: DynFlags -> String
 pgm_i dflags = sPgm_i (settings dflags)
+pgm_e                 :: DynFlags -> String
+pgm_e dflags = sPgm_e (settings dflags)
 opt_L                 :: DynFlags -> [String]
 opt_L dflags = sOpt_L (settings dflags)
 opt_P                 :: DynFlags -> [String]
@@ -2374,6 +2377,8 @@ dynamic_flags_deps = [
       (hasArg (\f -> alterSettings (\s -> s { sPgm_lc  = (f,[])})))
   , make_ord_flag defFlag "pgmi"
       (hasArg (\f -> alterSettings (\s -> s { sPgm_i  =  f})))
+  , make_ord_flag defFlag "pgme"
+      (hasArg (\f -> alterSettings (\s -> s { sPgm_e  =  f})))
   , make_ord_flag defFlag "pgmL"
       (hasArg (\f -> alterSettings (\s -> s { sPgm_L   = f})))
   , make_ord_flag defFlag "pgmP"
@@ -3626,7 +3631,10 @@ defaultFlags settings
 
     ++ concatMap (wayGeneralFlags platform) (defaultWays settings)
 
+    ++ (if needsExternalInterpreter then [Opt_ExternalInterpreter] else [])
+
     where platform = sTargetPlatform settings
+          needsExternalInterpreter = platformIsCrossCompiling platform
 
 default_PIC :: Platform -> [GeneralFlag]
 default_PIC platform =

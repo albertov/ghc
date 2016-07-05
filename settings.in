@@ -27,6 +27,7 @@
  ("target has subsections via symbols", "@HaskellHaveSubsectionsViaSymbols@"),
  ("Unregisterised", "@Unregisterised@"),
  ("LLVM llc command", "@SettingsLlcCommand@"),
- ("LLVM opt command", "@SettingsOptCommand@")
+ ("LLVM opt command", "@SettingsOptCommand@"),
+ ("Cross-compile emulator command", "@CrossCompileEmulator@")
  ]
 

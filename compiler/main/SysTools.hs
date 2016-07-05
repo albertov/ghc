@@ -318,6 +318,7 @@ initSysTools mbMinusB
        lo_prog <- getSetting "LLVM opt command"
 
        let iserv_prog = libexec "ghc-iserv"
+       emulator_prog <- getSetting "Cross-compile emulator command"
 
        let platform = Platform {
                           platformArch = targetArch,
@@ -359,6 +360,7 @@ initSysTools mbMinusB
                     sPgm_lo  = (lo_prog,[]),
                     sPgm_lc  = (lc_prog,[]),
                     sPgm_i   = iserv_prog,
+                    sPgm_e   = emulator_prog,
                     sOpt_L       = [],
                     sOpt_P       = [],
                     sOpt_F       = [],
