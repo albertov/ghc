@@ -1,11 +1,11 @@
-{-# LANGUAGE RecordWildCards, GADTs, ScopedTypeVariables, RankNTypes #-}
+{-# LANGUAGE RecordWildCards, GADTs, ScopedTypeVariables, RankNTypes, CPP #-}
 module Main (main) where
 
 import GHCi.Run
 import GHCi.TH
 import GHCi.Message
 import GHCi.Signals
-import GHCi.Utils
+import GHC.IO.Handle.FD (openFileBlocking)
 
 import Control.DeepSeq
 import Control.Exception
@@ -14,22 +14,38 @@ import Data.Binary
 import Data.IORef
 import System.Environment
 import System.Exit
+import System.IO
 import Text.Printf
 
 main :: IO ()
 main = do
-  (arg0:arg1:rest) <- getArgs
-  let wfd1 = read arg0; rfd2 = read arg1
+  (wFifo:rFifo:rest) <- getArgs
   verbose <- case rest of
     ["-v"] -> return True
     []     -> return False
-    _      -> die "iserv: syntax: iserv <write-fd> <read-fd> [-v]"
+    _      -> die "iserv: syntax: iserv <write-fifo> <read-fifo> [-v]"
   when verbose $ do
-    printf "GHC iserv starting (in: %d; out: %d)\n"
-      (fromIntegral rfd2 :: Int) (fromIntegral wfd1 :: Int)
-  inh  <- getGhcHandle rfd2
-  outh <- getGhcHandle wfd1
+    printf "GHC iserv starting (in: %s; out: %s)\n" rFifo wFifo
   installSignalHandlers
+#if defined(mingw32_HOST_OS)
+  -- When cross-compiling we need to preload these DLLs since base depends
+  -- on symbols defined in them.
+  -- Interestingly, running ghc-iserv.exe with "+RTS -Dl" shows that ghc
+  -- sends FindSystemLibrary requests looking for them but for some reason
+  -- never sends LoadDLL requests for them.
+  mapM_ (run . LoadDLL)
+    [ "shell32"   -- for _CommandLineToArgvW
+    , "wsock32"   -- for _recv
+    ]
+#endif
+  -- The order in which we open the pipes must be the same at the other end or
+  -- we'll deadlock
+  inh <- openBinaryFile rFifo ReadMode
+  outh <- openFileBlocking wFifo WriteMode
+  hSetBinaryMode outh True
+  hSetBuffering inh NoBuffering
+  hSetBuffering outh NoBuffering
+
   lo_ref <- newIORef Nothing
   let pipe = Pipe{pipeRead = inh, pipeWrite = outh, pipeLeftovers = lo_ref}
   uninterruptibleMask $ serv verbose pipe

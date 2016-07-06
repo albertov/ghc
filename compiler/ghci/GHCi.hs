@@ -61,6 +61,7 @@ import Exception
 import BasicTypes
 import FastString
 import Util
+import SysTools
 
 import Control.Concurrent
 import Control.Monad
@@ -73,11 +74,12 @@ import Data.IORef
 import Foreign hiding (void)
 import GHC.Stack.CCS (CostCentre,CostCentreStack)
 import System.Exit
+import System.IO
 import Data.Maybe
 import GHC.IO.Handle.Types (Handle)
+import GHC.IO.Handle.FD (openFileBlocking)
 #ifdef mingw32_HOST_OS
 import Foreign.C
-import GHC.IO.Handle.FD (fdToHandle)
 #else
 import System.Posix as Posix
 #endif
@@ -442,16 +444,7 @@ startIServ dflags = do
         | otherwise = ""
       iserv = pgm_i dflags ++ flavour ++ iservExtension
       iserv_opts = getOpts dflags opt_i
-      emulated = platformIsCrossCompiling . sTargetPlatform . settings $ dflags
-      (prog, opts, msg)
-        | emulated = ( pgm_e dflags
-                     , iserv : iserv_opts
-                     , text "Starting " <> text iserv <>
-                       text " via " <> text (pgm_e dflags)
-                     )
-        | otherwise = (iserv, iserv_opts, text "Starting " <> text iserv)
-  debugTraceMsg dflags 3 msg
-  (ph, rh, wh) <- runWithPipes prog opts
+  (ph, rh, wh) <- runWithPipes dflags iserv iserv_opts
   lo_ref <- newIORef Nothing
   cache_ref <- newIORef emptyUFM
   return $ IServ
@@ -485,40 +478,47 @@ stopIServ HscEnv{..} =
        then return ()
        else iservCall iserv Shutdown
 
-runWithPipes :: FilePath -> [String] -> IO (ProcessHandle, Handle, Handle)
+runWithPipes :: DynFlags -> FilePath -> [String]
+             -> IO (ProcessHandle, Handle, Handle)
+runWithPipes dflags prog opts = do
+    debugTraceMsg dflags 3 startMsg
+    rPath <- newTempName dflags "rfifo"
+    wPath <- newTempName dflags "wfifo"
+    addFilesToClean dflags [wPath, rPath]
+
+    createNamedPipe' rPath
+    createNamedPipe' wPath
+
+    let (prog', args) = case mEmulator of 
+                          Just emu -> (emu,  prog : rPath : wPath : opts)
+                          Nothing  -> (prog,        rPath : wPath : opts)
+    (_, _, _, ph) <- createProcess (proc prog' args)
+    -- The order in which we open the pipes must be the same at the other end or
+    -- we'll deadlock
+    wh <- openFileBlocking wPath WriteMode
+    rh <- openBinaryFile rPath ReadMode
+    hSetBinaryMode wh True
+    hSetBuffering wh NoBuffering
+    hSetBuffering rh NoBuffering
+    return (ph, rh, wh)
+ where
+  emulated = platformIsCrossCompiling . sTargetPlatform . settings $ dflags
+  mEmulator = if emulated then Just (pgm_e dflags) else Nothing
+  startMsg = text "Starting " <> text prog
+     <> case mEmulator of {Just e -> text " via " <> text e; Nothing -> text ""}
+
+createNamedPipe' :: FilePath -> IO ()
 #ifdef mingw32_HOST_OS
 foreign import ccall "io.h _close"
    c__close :: CInt -> IO CInt
 
 foreign import ccall unsafe "io.h _get_osfhandle"
    _get_osfhandle :: CInt -> IO CInt
-
-runWithPipes prog opts = do
-    (rfd1, wfd1) <- createPipeFd -- we read on rfd1
-    (rfd2, wfd2) <- createPipeFd -- we write on wfd2
-    wh_client    <- _get_osfhandle wfd1
-    rh_client    <- _get_osfhandle rfd2
-    let args = show wh_client : show rh_client : opts
-    (_, _, _, ph) <- createProcess (proc prog args)
-    rh <- mkHandle rfd1
-    wh <- mkHandle wfd2
-    return (ph, rh, wh)
-      where mkHandle :: CInt -> IO Handle
-            mkHandle fd = (fdToHandle fd) `onException` (c__close fd)
+createNamedPipe' = error "createNamedPipe: work in progres..."
 #else
-runWithPipes prog opts = do
-    (rfd1, wfd1) <- Posix.createPipe -- we read on rfd1
-    (rfd2, wfd2) <- Posix.createPipe -- we write on wfd2
-    setFdOption rfd1 CloseOnExec True
-    setFdOption wfd2 CloseOnExec True
-    let args = show wfd1 : show rfd2 : opts
-    (_, _, _, ph) <- createProcess (proc prog args)
-    closeFd wfd1
-    closeFd rfd2
-    rh <- fdToHandle rfd1
-    wh <- fdToHandle wfd2
-    return (ph, rh, wh)
+createNamedPipe' = flip Posix.createNamedPipe ownerModes
 #endif
+
 
 -- -----------------------------------------------------------------------------
 {- Note [External GHCi pointers]
