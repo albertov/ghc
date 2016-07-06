@@ -3631,10 +3631,7 @@ defaultFlags settings
 
     ++ concatMap (wayGeneralFlags platform) (defaultWays settings)
 
-    ++ (if needsExternalInterpreter then [Opt_ExternalInterpreter] else [])
-
     where platform = sTargetPlatform settings
-          needsExternalInterpreter = platformIsCrossCompiling platform
 
 default_PIC :: Platform -> [GeneralFlag]
 default_PIC platform =
