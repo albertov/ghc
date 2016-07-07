@@ -510,10 +510,7 @@ endif
 
 # We install all packages that we build.
 INSTALL_PACKAGES := $(addprefix libraries/,$(PACKAGES_STAGE1))
-# See Note [Stage1Only vs stage=1] in mk/config.mk.in.
-ifneq "$(Stage1Only)" "YES"
 INSTALL_PACKAGES += compiler
-endif
 INSTALL_PACKAGES += $(addprefix libraries/,$(PACKAGES_STAGE2))
 
 endif # CLEANING
