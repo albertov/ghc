@@ -77,8 +77,7 @@ import System.Exit
 import System.IO
 import Data.Maybe
 import GHC.IO.Handle.Types (Handle)
-import GHC.IO.Handle.FD (mkHandleFromFD)
-import GHC.IO.FD as FD
+import GHC.IO.Handle.FD (openFileBlocking)
 #ifdef mingw32_HOST_OS
 import Foreign.C
 #else
@@ -485,21 +484,32 @@ runWithPipes dflags prog opts = do
     debugTraceMsg dflags 3 startMsg
     rPath <- newTempName dflags "rfifo"
     wPath <- newTempName dflags "wfifo"
-    addFilesToClean dflags [wPath, rPath]
+    -- FIXME: add a flag to enable saving these next two files somewhere for debugging
+    stdoutPath <- newTempName dflags "stdout"
+    stderrPath <- newTempName dflags "stderr"
 
     createNamedPipe' rPath
     createNamedPipe' wPath
+    addFilesToClean dflags [wPath, rPath, stdoutPath, stderrPath]
 
     let (prog', args) = case mEmulator of 
                           Just emu -> (emu,  prog : rPath : wPath : opts)
                           Nothing  -> (prog,        rPath : wPath : opts)
+    stdoutH <- openFile stdoutPath WriteMode
+    stderrH <- openFile stderrPath WriteMode
     (_, _, _, ph) <- createProcess (proc prog' args)
+      -- We prevent these descriptors to be inheritted because it causes a deadlock for
+      -- some reason when stderr or stdout are redirected to files when iserv runs
+      -- through wine
+      { std_in  = NoStream
+      , std_out = UseHandle stdoutH
+      , std_err = UseHandle stderrH
+      }
     -- The order in which we open the pipes must be the same at the other end or
     -- we'll deadlock
-    (wFd,wDt) <- FD.openFile wPath WriteMode False -- open in blocking mode
-    wh <- mkHandleFromFD wFd wDt wPath WriteMode True Nothing
-    -- set to non-blocking afterwards -----------^
+    wh <- openFileBlocking wPath WriteMode
     hSetBuffering wh NoBuffering
+    hSetBinaryMode wh True
 
     rh <- openBinaryFile rPath ReadMode
     hSetBuffering rh NoBuffering

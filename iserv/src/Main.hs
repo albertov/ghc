@@ -5,8 +5,7 @@ import GHCi.Run
 import GHCi.TH
 import GHCi.Message
 import GHCi.Signals
-import GHC.IO.Handle.FD (mkHandleFromFD)
-import GHC.IO.FD as FD
+import GHC.IO.Handle.FD (openFileBlocking)
 
 import Control.DeepSeq
 import Control.Exception
@@ -44,10 +43,9 @@ main = do
   inh <- openBinaryFile rFifo ReadMode
   hSetBuffering inh NoBuffering
 
-  (oFd,oDt) <- FD.openFile wFifo WriteMode False -- open in blocking mode
-  outh <- mkHandleFromFD oFd oDt wFifo WriteMode True Nothing
-  -- set to non-blocking afterwards -------------^
+  outh <- openFileBlocking wFifo WriteMode
   hSetBuffering outh NoBuffering
+  hSetBinaryMode outh True
 
   lo_ref <- newIORef Nothing
   let pipe = Pipe{pipeRead = inh, pipeWrite = outh, pipeLeftovers = lo_ref}
