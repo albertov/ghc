@@ -5,7 +5,8 @@ import GHCi.Run
 import GHCi.TH
 import GHCi.Message
 import GHCi.Signals
-import GHC.IO.Handle.FD (openFileBlocking)
+import GHC.IO.Handle.FD (mkHandleFromFD)
+import GHC.IO.FD as FD
 
 import Control.DeepSeq
 import Control.Exception
@@ -41,9 +42,11 @@ main = do
   -- The order in which we open the pipes must be the same at the other end or
   -- we'll deadlock
   inh <- openBinaryFile rFifo ReadMode
-  outh <- openFileBlocking wFifo WriteMode
-  hSetBinaryMode outh True
   hSetBuffering inh NoBuffering
+
+  (oFd,oDt) <- FD.openFile wFifo WriteMode False -- open in blocking mode
+  outh <- mkHandleFromFD oFd oDt wFifo WriteMode True Nothing
+  -- set to non-blocking afterwards -------------^
   hSetBuffering outh NoBuffering
 
   lo_ref <- newIORef Nothing

@@ -77,7 +77,8 @@ import System.Exit
 import System.IO
 import Data.Maybe
 import GHC.IO.Handle.Types (Handle)
-import GHC.IO.Handle.FD (openFileBlocking)
+import GHC.IO.Handle.FD (mkHandleFromFD)
+import GHC.IO.FD as FD
 #ifdef mingw32_HOST_OS
 import Foreign.C
 #else
@@ -495,11 +496,14 @@ runWithPipes dflags prog opts = do
     (_, _, _, ph) <- createProcess (proc prog' args)
     -- The order in which we open the pipes must be the same at the other end or
     -- we'll deadlock
-    wh <- openFileBlocking wPath WriteMode
-    rh <- openBinaryFile rPath ReadMode
-    hSetBinaryMode wh True
+    (wFd,wDt) <- FD.openFile wPath WriteMode False -- open in blocking mode
+    wh <- mkHandleFromFD wFd wDt wPath WriteMode True Nothing
+    -- set to non-blocking afterwards -----------^
     hSetBuffering wh NoBuffering
+
+    rh <- openBinaryFile rPath ReadMode
     hSetBuffering rh NoBuffering
+
     return (ph, rh, wh)
  where
   emulated = platformIsCrossCompiling . sTargetPlatform . settings $ dflags
